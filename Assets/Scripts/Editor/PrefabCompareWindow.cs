@@ -184,7 +184,7 @@ public class PrefabCompareWindow : EditorWindow
         return obj1.name == obj2.name && relPath1 == relPath2;
     }
 
-    void CompareComp(GameObject p1, GameObject p2)
+    void CompareComp(GameObject obj1, GameObject obj2)
     {
         return;
     }
