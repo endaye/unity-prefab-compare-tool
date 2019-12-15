@@ -33,7 +33,7 @@ public class PrefabCompareWindow : EditorWindow
     static List<string> delList = new List<string>();
     static List<string> modList = new List<string>();
     static List<string> comList = new List<string>();
-    Vector2 scroll;
+    static Vector2 scroll;
 
     [MenuItem("Tools/Prefab Compare")]
     static void Init()
@@ -83,8 +83,6 @@ public class PrefabCompareWindow : EditorWindow
             }
         }
         GUILayout.EndHorizontal();
-        // ShowPrefabHierarchy(ref prefab1, ref dict1);
-        // ShowPrefabHierarchy(ref prefab2, ref dict2);
 
         if (GUILayout.Button("Compare"))
         {
@@ -104,12 +102,12 @@ public class PrefabCompareWindow : EditorWindow
         }
     }
 
-    void CompareAll()
+    static void CompareAll()
     {
         CompareDFS(prefab1, prefab2);
     }
 
-    void CompareDFS(GameObject obj1, GameObject obj2)
+    static void CompareDFS(GameObject obj1, GameObject obj2)
     {
         CompareComp(obj1, obj2);
         if (obj1.transform.childCount == 0 && obj2.transform.childCount == 0)
@@ -125,9 +123,9 @@ public class PrefabCompareWindow : EditorWindow
         }
         else if (obj1.transform.childCount > 0 && obj2.transform.childCount == 0)
         {
-            foreach (GameObject c1 in obj1.transform)
+            foreach (Transform c1 in obj1.transform)
             {
-                delList.Add(string.Format("<color=red>trunk:</color> {0}", dict1[c1].path));
+                delList.Add(string.Format("<color=red>trunk:</color> {0}", dict1[c1.gameObject].path));
             }
         }
         else
@@ -173,7 +171,7 @@ public class PrefabCompareWindow : EditorWindow
         }
     }
 
-    bool CompareBasic(GameObject obj1, GameObject obj2)
+    static bool CompareBasic(GameObject obj1, GameObject obj2)
     {
         var path1 = dict1[obj1].path;
         var index1 = path1.IndexOf('/', 1);
@@ -184,12 +182,12 @@ public class PrefabCompareWindow : EditorWindow
         return obj1.name == obj2.name && relPath1 == relPath2;
     }
 
-    void CompareComp(GameObject obj1, GameObject obj2)
+    static void CompareComp(GameObject obj1, GameObject obj2)
     {
         return;
     }
 
-    void OutputLog()
+    static void OutputLog()
     {
         Debug.LogFormat("<color=lime>Add new game objects in dev ({1})</color>\n{0}", string.Join("\n", addList.ToArray()), addList.Count);
         Debug.LogFormat("<color=red>Delete from trunk ({1})</color>\n{0}", string.Join("\n", delList.ToArray()), delList.Count);
@@ -197,85 +195,14 @@ public class PrefabCompareWindow : EditorWindow
         Debug.LogFormat("<color=yellow>Changed components ({1})</color>\n{0}", string.Join("\n", comList.ToArray()), comList.Count);
     }
 
-    void InitDict(ref GameObject prefab, ref Dictionary<GameObject, PNode> dict)
+    static void InitDict(ref GameObject prefab, ref Dictionary<GameObject, PNode> dict)
     {
         gameObjects = null;
         dict.Clear();
         DFS(prefab, dict, 0, "");
     }
 
-    void ShowPrefabHierarchy(ref GameObject prefab, ref Dictionary<GameObject, PNode> dict)
-    {
-        EditorGUI.BeginChangeCheck();
-        prefab = (GameObject)EditorGUILayout.ObjectField("trunk", prefab, typeof(GameObject), false);
-        if (EditorGUI.EndChangeCheck() && prefab != null)
-        {
-            Debug.LogFormat("{0} changed", prefab.name);
-            gameObjects = null;
-            dict.Clear();
-            DFS(prefab, dict, 0, "");
-            gameObjects = dict1.Keys.ToArray();
-        }
-        if (GUILayout.Button("Show/Hide All"))
-        {
-            ToggleAllNode(prefab, dict);
-        }
-        scroll = EditorGUILayout.BeginScrollView(scroll, GUILayout.Width(200), GUILayout.Height(500));
-        {
-            // gameObjects = GameObject.FindObjectsOfType(typeof(GameObject)) as GameObject[];
-            if (prefab != null)
-            {
-                foreach (GameObject go in gameObjects)
-                {
-                    // Start with game objects without any parents
-                    if (go.transform.parent == null)
-                    {
-                        // Show the object and its children
-                        ShowObject(go, gameObjects);
-                    }
-                }
-            }
-        }
-        EditorGUILayout.EndScrollView();
-    }
-
-    void ShowObject(GameObject parent, GameObject[] gameObjects)
-    {
-        // Show entry for parent object
-        GUILayout.BeginHorizontal();
-        GUILayout.Space(SPACE_PIXEL * dict1[parent].level);
-        GUI.color = dict1[parent].active ? COLOR_ACTIVE : GUI.color = COLOR_INACTIVE;
-        if (parent.transform.transform.childCount > 0)
-        {
-            EditorGUI.BeginChangeCheck();
-            dict1[parent].show = EditorGUILayout.Foldout(dict1[parent].show, parent.name);
-            if (EditorGUI.EndChangeCheck())
-            {
-                Debug.LogFormat("{0}.show = {1}", parent.name, dict1[parent].show);
-                InspectTarget(parent);
-            }
-        }
-        else
-        {
-            // GUILayout.Label(parent.name);
-            EditorGUILayout.ObjectField(parent.name, parent, typeof(GameObject), false);
-        }
-        GUILayout.EndHorizontal();
-        if (dict1[parent].show && parent.transform.transform.childCount > 0)
-        {
-            foreach (GameObject go in gameObjects)
-            {
-                // Find children of the parent game object
-                if (go.transform.parent == parent.transform)
-                {
-                    ShowObject(go, gameObjects);
-                }
-            }
-        }
-        GUI.color = COLOR_ACTIVE;
-    }
-
-    void DFS(GameObject obj, Dictionary<GameObject, PNode> dict, int level, string path)
+    static void DFS(GameObject obj, Dictionary<GameObject, PNode> dict, int level, string path)
     {
         if (obj == null)
         {
@@ -293,54 +220,10 @@ public class PrefabCompareWindow : EditorWindow
         }
     }
 
-    void ToggleAllNode(GameObject root, Dictionary<GameObject, PNode> dict)
+    public static long GetLocalID(GameObject go)
     {
-        if (dict.ContainsKey(root))
-        {
-            var show = !dict[root].show;
-            foreach (var node in dict)
-            {
-                node.Value.show = show;
-            }
-        }
-        else
-        {
-            Debug.LogError("GameObject and Dictionary are not match");
-        }
+        SerializedObject so = new SerializedObject(go);
+        SerializedProperty localIDProp = so.FindProperty("m_LocalIdentfierInFile");
+        return localIDProp.longValue;
     }
-
-    /// <summary>
-    /// Creates a new inspector window instance and locks it to inspect the specified target
-    /// </summary>
-    public static void InspectTarget(GameObject target)
-    {
-        var inspectorType = typeof(Editor).Assembly.GetType("UnityEditor.InspectorWindow");
-        if (inspectorInstance == null)
-        {
-            // Get a reference to the `InspectorWindow` type object
-            // Create an InspectorWindow instance
-            inspectorInstance = ScriptableObject.CreateInstance(inspectorType) as EditorWindow;
-        }
-        // We display it - currently, it will inspect whatever gameObject is currently selected
-        // So we need to find a way to let it inspect/aim at our target GO that we passed
-        // For that we do a simple trick:
-        // 1- Cache the current selected gameObject
-        // 2- Set the current selection to our target GO (so now all inspectors are targeting it)
-        // 3- Lock our created inspector to that target
-        // 4- Fallback to our previous selection
-        // inspectorInstance.Show();
-
-        // // Cache previous selected gameObject
-        // var prevSelection = Selection.activeGameObject;
-        // // Set the selection to GO we want to inspect
-        // Selection.activeGameObject = target;
-        // // Get a ref to the "locked" property, which will lock the state of the inspector to the current inspected target
-        // var isLocked = inspectorType.GetProperty("isLocked", BindingFlags.Instance | BindingFlags.Public);
-        // // Invoke `isLocked` setter method passing 'true' to lock the inspector
-        // isLocked.GetSetMethod().Invoke(inspectorInstance, new object[] { true });
-        // // Finally revert back to the previous selection so that other inspectors continue to inspect whatever they were inspecting...
-        // Selection.activeGameObject = prevSelection;
-    }
-    // Now you just:
-    // InspectTarget(myGO);
 }
