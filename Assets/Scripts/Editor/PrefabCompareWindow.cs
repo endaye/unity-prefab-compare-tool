@@ -15,6 +15,7 @@ public class PrefabCompareWindow : EditorWindow
         public bool active;
         public int level;
         public string path;
+        public long localId;
         public PNode(GameObject gameObject)
         {
             this.gameObject = gameObject;
@@ -32,7 +33,9 @@ public class PrefabCompareWindow : EditorWindow
     static List<string> addList = new List<string>();
     static List<string> delList = new List<string>();
     static List<string> modList = new List<string>();
-    static List<string> comList = new List<string>();
+    static List<string> comAddList = new List<string>();
+    static List<string> comDelList = new List<string>();
+    static List<string> comModList = new List<string>();
     static Vector2 scroll;
 
     [MenuItem("Tools/Prefab Compare")]
@@ -95,7 +98,9 @@ public class PrefabCompareWindow : EditorWindow
                 addList.Clear();
                 delList.Clear();
                 modList.Clear();
-                comList.Clear();
+                comAddList.Clear();
+                comDelList.Clear();
+                comModList.Clear();
                 CompareAll();
                 OutputLog();
             }
@@ -107,8 +112,14 @@ public class PrefabCompareWindow : EditorWindow
         CompareDFS(prefab1, prefab2);
     }
 
+    // 1. Compare two game objects' file id
+    // 2. Compare two game objects' attributes
+    // 3. Compare components
+    // 4. Compare components attributs
+    // 5. To children
     static void CompareDFS(GameObject obj1, GameObject obj2)
     {
+        CompareBasicAttr(obj1, obj2);
         CompareComp(obj1, obj2);
         if (obj1.transform.childCount == 0 && obj2.transform.childCount == 0)
         {
@@ -139,7 +150,7 @@ public class PrefabCompareWindow : EditorWindow
                 for (var j = start2; j < obj2.transform.childCount; j++)
                 {
                     var c2 = obj2.transform.GetChild(j).gameObject;
-                    if (CompareBasic(c1, c2))
+                    if (dict1[c1].localId == dict2[c2].localId)
                     {
                         start2 = j + 1;
                         common.Add(c1);
@@ -166,20 +177,33 @@ public class PrefabCompareWindow : EditorWindow
             var commonArr = common.ToArray();
             for (var i = 0; i < commonArr.Length; i += 2)
             {
-                CompareDFS(commonArr[i], commonArr[i + 1]);
+                // CompareDFS(commonArr[i], commonArr[i + 1]);
             }
         }
     }
 
-    static bool CompareBasic(GameObject obj1, GameObject obj2)
+    static bool CompareBasicAttr(GameObject obj1, GameObject obj2)
     {
-        var path1 = dict1[obj1].path;
-        var index1 = path1.IndexOf('/', 1);
-        var relPath1 = path1.Substring(index1);
-        var path2 = dict2[obj2].path;
-        var index2 = path2.IndexOf('/', 1);
-        var relPath2 = path2.Substring(index2);
-        return obj1.name == obj2.name && relPath1 == relPath2;
+        // var path1 = dict1[obj1].path;
+        // var index1 = path1.IndexOf('/', 1);
+        // var relPath1 = path1.Substring(index1);
+        // var path2 = dict2[obj2].path;
+        // var index2 = path2.IndexOf('/', 1);
+        // var relPath2 = path2.Substring(index2);
+        // return obj1.name == obj2.name && relPath1 == relPath2;
+        initDebugMode();
+        SerializedObject so1 = new SerializedObject(obj1);
+        SerializedObject so2 = new SerializedObject(obj2);
+        SerializedProperty it1 = so1.GetIterator();
+        SerializedProperty it2 = so2.GetIterator();
+        // MyObject myObj = ScriptableObject.CreateInstance<MyObject>();
+        // SerializedObject mySerializedObject = new UnityEditor.SerializedObject(myObj);
+        // SerializedProperty iterator = mySerializedObject.FindProperty("PropertyName");
+        do
+        {
+            Debug.LogFormat("{0}, {1}\n{2}, {3}", it1.name, it1.type, it2.name, it2.type);
+        } while (it1.Next(true) && it2.Next(true));
+        return true;
     }
 
     static void CompareComp(GameObject obj1, GameObject obj2)
@@ -187,12 +211,17 @@ public class PrefabCompareWindow : EditorWindow
         return;
     }
 
+    static void CompareCompAttr(Component comp1, Component comp2)
+    {
+        return;
+    }
+
     static void OutputLog()
     {
-        Debug.LogFormat("<color=lime>Add new game objects in dev ({1})</color>\n{0}", string.Join("\n", addList.ToArray()), addList.Count);
-        Debug.LogFormat("<color=red>Delete from trunk ({1})</color>\n{0}", string.Join("\n", delList.ToArray()), delList.Count);
-        Debug.LogFormat("<color=orange>Modified game objects ({1})</color>\n{0}", string.Join("\n", modList.ToArray()), modList.Count);
-        Debug.LogFormat("<color=yellow>Changed components ({1})</color>\n{0}", string.Join("\n", comList.ToArray()), comList.Count);
+        Debug.LogFormat("<color=lime>Add GameObjects ({1})</color>\n{0}", string.Join("\n", addList.ToArray()), addList.Count);
+        Debug.LogFormat("<color=red>Delete GameObjects  ({1})</color>\n{0}", string.Join("\n", delList.ToArray()), delList.Count);
+        Debug.LogFormat("<color=orange>Modified GameObjects ({1})</color>\n{0}", string.Join("\n", modList.ToArray()), modList.Count);
+        Debug.LogFormat("<color=yellow>Add Component ({1})</color>\n{0}", string.Join("\n", comAddList.ToArray()), comAddList.Count);
     }
 
     static void InitDict(ref GameObject prefab, ref Dictionary<GameObject, PNode> dict)
@@ -213,6 +242,7 @@ public class PrefabCompareWindow : EditorWindow
         node.level = level;
         node.active = obj.activeSelf && (obj.transform.parent == null || dict[obj.transform.parent.gameObject].active);
         node.path = string.Format("{0}/{1}", path, obj.name);
+        node.localId = GetLocalID(obj);
         dict.Add(obj, node);
         foreach (Transform child in obj.transform)
         {
@@ -220,10 +250,26 @@ public class PrefabCompareWindow : EditorWindow
         }
     }
 
+    // UTIL
+    static PropertyInfo debugModeInspectorThing;
+
+    // A hack to allow for SerializedObject to contain the m_LocalIdentfierInFile
+    // SerializedProperty, which is required for the localID to be retrieved.
     public static long GetLocalID(GameObject go)
     {
+        initDebugMode();
         SerializedObject so = new SerializedObject(go);
+        debugModeInspectorThing.SetValue(so, InspectorMode.Debug, null);
         SerializedProperty localIDProp = so.FindProperty("m_LocalIdentfierInFile");
         return localIDProp.longValue;
     }
+
+    static void initDebugMode()
+    {
+        if (debugModeInspectorThing == null)
+        {
+            debugModeInspectorThing = typeof(SerializedObject).GetProperty("inspectorMode", BindingFlags.NonPublic | BindingFlags.Instance);
+        }
+    }
+
 }
