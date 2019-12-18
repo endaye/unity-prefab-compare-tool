@@ -58,7 +58,7 @@ public class PrefabCompareWindow : EditorWindow
         GUILayout.BeginHorizontal();
         {
             EditorGUI.BeginChangeCheck();
-            prefab1 = (GameObject)EditorGUILayout.ObjectField("trunk", prefab1, typeof(GameObject), false);
+            prefab1 = (GameObject)EditorGUILayout.ObjectField("trunk", prefab1, typeof(GameObject), true);
             if (EditorGUI.EndChangeCheck() && prefab1 != null)
             {
                 Debug.LogFormat("{0} changed", prefab1.name);
@@ -72,7 +72,7 @@ public class PrefabCompareWindow : EditorWindow
             }
 
             EditorGUI.BeginChangeCheck();
-            prefab2 = (GameObject)EditorGUILayout.ObjectField("dev", prefab2, typeof(GameObject), false);
+            prefab2 = (GameObject)EditorGUILayout.ObjectField("dev", prefab2, typeof(GameObject), true);
             if (EditorGUI.EndChangeCheck() && prefab2 != null)
             {
                 Debug.LogFormat("{0} changed", prefab2.name);
@@ -184,30 +184,49 @@ public class PrefabCompareWindow : EditorWindow
 
     static bool CompareBasicAttr(GameObject obj1, GameObject obj2)
     {
-        // var path1 = dict1[obj1].path;
-        // var index1 = path1.IndexOf('/', 1);
-        // var relPath1 = path1.Substring(index1);
-        // var path2 = dict2[obj2].path;
-        // var index2 = path2.IndexOf('/', 1);
-        // var relPath2 = path2.Substring(index2);
-        // return obj1.name == obj2.name && relPath1 == relPath2;
-        initDebugMode();
-        SerializedObject so1 = new SerializedObject(obj1);
-        SerializedObject so2 = new SerializedObject(obj2);
-        SerializedProperty it1 = so1.GetIterator();
-        SerializedProperty it2 = so2.GetIterator();
-        // MyObject myObj = ScriptableObject.CreateInstance<MyObject>();
-        // SerializedObject mySerializedObject = new UnityEditor.SerializedObject(myObj);
-        // SerializedProperty iterator = mySerializedObject.FindProperty("PropertyName");
-        do
+        var path1 = dict1[obj1].path;
+        var path2 = dict2[obj2].path;
+        var index1 = path1.IndexOf('/', 1);
+        var index2 = path2.IndexOf('/', 1);
+        var relPath1 = index1 > 0 ? path1.Substring(index1) : "";
+        var relPath2 = index2 > 0 ? path2.Substring(index2) : "";
+        var activeSelf1 = obj1.activeSelf;
+        var activeSelf2 = obj2.activeSelf;
+        var transform1 = obj1.transform;
+        var transform2 = obj2.transform;
+        if (obj1.name == obj2.name && relPath1 == relPath2 && activeSelf1 == activeSelf2 && transform1 == transform2)
         {
-            Debug.LogFormat("{0}, {1}\n{2}, {3}", it1.name, it1.type, it2.name, it2.type);
-        } while (it1.Next(true) && it2.Next(true));
-        return true;
+            return true;
+        }
+        if (obj1.name != obj2.name)
+        {
+            modList.Add(string.Format("<color=lime>dev:</color>   {0}, GameObject.name", dict2[obj2].path));
+        }
+        if (activeSelf1 != activeSelf2)
+        {
+            modList.Add(string.Format("<color=lime>dev:</color>   {0}, GameObject.activeSelf", dict2[obj2].path));
+        }
+        if (transform1 != transform2)
+        {
+            modList.Add(string.Format("<color=lime>dev:</color>   {0}, GameObject.transform", dict2[obj2].path));
+        }
+        return false;
     }
 
     static void CompareComp(GameObject obj1, GameObject obj2)
     {
+        var cs1 = obj1.GetComponents(typeof(Component));
+        var cs2 = obj2.GetComponents(typeof(Component));
+        foreach (Component c in cs1)
+        {
+            Debug.Log(c.name);
+            // Debug.Log("name " + c.name + " type " + c.GetType() + " basetype " + c.GetType().BaseType);
+            // foreach (FieldInfo fi in c.GetType().GetFields())
+            // {
+            //     System.Object obj = (System.Object)c;
+            //     Debug.Log("fi name " + fi.Name + " val " + fi.GetValue(obj));
+            // }
+        }
         return;
     }
 
