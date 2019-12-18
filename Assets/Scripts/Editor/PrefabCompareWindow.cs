@@ -61,7 +61,7 @@ public class PrefabCompareWindow : EditorWindow
             prefab1 = (GameObject)EditorGUILayout.ObjectField("trunk", prefab1, typeof(GameObject), true);
             if (EditorGUI.EndChangeCheck() && prefab1 != null)
             {
-                Debug.LogFormat("{0} changed", prefab1.name);
+                // Debug.LogFormat("{0} changed", prefab1.name);
                 InitDict(ref prefab1, ref dict1);
                 // gameObjects = dict1.Keys.ToArray();
             }
@@ -75,7 +75,7 @@ public class PrefabCompareWindow : EditorWindow
             prefab2 = (GameObject)EditorGUILayout.ObjectField("dev", prefab2, typeof(GameObject), true);
             if (EditorGUI.EndChangeCheck() && prefab2 != null)
             {
-                Debug.LogFormat("{0} changed", prefab2.name);
+                // Debug.LogFormat("{0} changed", prefab2.name);
                 InitDict(ref prefab2, ref dict2);
                 // gameObjects = dict2.Keys.ToArray();
             }
@@ -177,7 +177,7 @@ public class PrefabCompareWindow : EditorWindow
             var commonArr = common.ToArray();
             for (var i = 0; i < commonArr.Length; i += 2)
             {
-                // CompareDFS(commonArr[i], commonArr[i + 1]);
+                CompareDFS(commonArr[i], commonArr[i + 1]);
             }
         }
     }
@@ -200,39 +200,84 @@ public class PrefabCompareWindow : EditorWindow
         }
         if (obj1.name != obj2.name)
         {
-            modList.Add(string.Format("<color=lime>dev:</color>   {0}, GameObject.name", dict2[obj2].path));
+            modList.Add(string.Format("<color=orange>dev:</color>   {0} (GameObject.name)", dict2[obj2].path));
         }
         if (activeSelf1 != activeSelf2)
         {
-            modList.Add(string.Format("<color=lime>dev:</color>   {0}, GameObject.activeSelf", dict2[obj2].path));
+            modList.Add(string.Format("<color=orange>dev:</color>   {0} (GameObject.activeSelf)", dict2[obj2].path));
         }
         if (transform1 != transform2)
         {
-            modList.Add(string.Format("<color=lime>dev:</color>   {0}, GameObject.transform", dict2[obj2].path));
+            modList.Add(string.Format("<color=orange>dev:</color>   {0} (GameObject.transform)", dict2[obj2].path));
         }
         return false;
     }
 
     static void CompareComp(GameObject obj1, GameObject obj2)
     {
-        var cs1 = obj1.GetComponents(typeof(Component));
-        var cs2 = obj2.GetComponents(typeof(Component));
-        foreach (Component c in cs1)
+        var cs1 = obj1.GetComponents(typeof(Component)) as Component[];
+        var cs2 = obj2.GetComponents(typeof(Component)) as Component[];
+        var common = new List<Component>();
+        var start2 = 0; // use to keep order
+        for (var i = 0; i < cs1.Length; i++)
         {
-            Debug.Log(c.name);
-            // Debug.Log("name " + c.name + " type " + c.GetType() + " basetype " + c.GetType().BaseType);
-            // foreach (FieldInfo fi in c.GetType().GetFields())
-            // {
-            //     System.Object obj = (System.Object)c;
-            //     Debug.Log("fi name " + fi.Name + " val " + fi.GetValue(obj));
-            // }
+            for (var j = start2; j < cs2.Length; j++)
+            {
+                if (cs1[i].GetType() == cs2[j].GetType())
+                {
+                    start2 = j + 1;
+                    common.Add(cs1[i]);
+                    common.Add(cs2[j]);
+                    break;
+                }
+            }
         }
-        return;
+        foreach (Component c1 in cs1)
+        {
+            if (!common.Contains(c1))
+            {
+                comDelList.Add(string.Format("<color=red>trunk:</color> {0} ({1})", dict1[obj1].path, c1.GetType()));
+            }
+        }
+        foreach (Component c2 in cs2)
+        {
+            if (!common.Contains(c2))
+            {
+                comAddList.Add(string.Format("<color=lime>dev:</color> {0} ({1})", dict2[obj2].path, c2.GetType()));
+            }
+        }
+        var commonArr = common.ToArray();
+        // Debug.Log(commonArr.Length);
+        for (var i = 0; i < commonArr.Length; i += 2)
+        {
+            CompareCompAttr(commonArr[i], commonArr[i + 1], obj1, obj2);
+        }
     }
 
-    static void CompareCompAttr(Component comp1, Component comp2)
+    static void CompareCompAttr(Component comp1, Component comp2, GameObject obj1, GameObject obj2)
     {
-        return;
+        var props1 = comp1.GetType().GetProperties();
+        var props2 = comp2.GetType().GetProperties();
+        if (props1.Length != props2.Length)
+        {
+            comModList.Add(string.Format("<color=orange>dev:</color>   {0} (Properties Count)", dict2[obj2].path));
+            return;
+        }
+        try
+        {
+            for (var i = 0; i < props1.Length; ++i)
+            {
+
+                if (props1[i].Name != props2[i].Name || props1[i].GetValue(comp1) != props2[i].GetValue(comp2))
+                {
+                    comModList.Add(string.Format("<color=orange>dev:</color>   {0} ({1})", dict2[obj2].path, props1[i].Name));
+                }
+            }
+        }
+        catch
+        {
+            Debug.LogError("err");
+        }
     }
 
     static void OutputLog()
@@ -240,7 +285,9 @@ public class PrefabCompareWindow : EditorWindow
         Debug.LogFormat("<color=lime>Add GameObjects ({1})</color>\n{0}", string.Join("\n", addList.ToArray()), addList.Count);
         Debug.LogFormat("<color=red>Delete GameObjects  ({1})</color>\n{0}", string.Join("\n", delList.ToArray()), delList.Count);
         Debug.LogFormat("<color=orange>Modified GameObjects ({1})</color>\n{0}", string.Join("\n", modList.ToArray()), modList.Count);
-        Debug.LogFormat("<color=yellow>Add Component ({1})</color>\n{0}", string.Join("\n", comAddList.ToArray()), comAddList.Count);
+        Debug.LogFormat("<color=lime>Add Component ({1})</color>\n{0}", string.Join("\n", comAddList.ToArray()), comAddList.Count);
+        Debug.LogFormat("<color=red>Delete Component ({1})</color>\n{0}", string.Join("\n", comDelList.ToArray()), comDelList.Count);
+        Debug.LogFormat("<color=orange>Modified Component ({1})</color>\n{0}", string.Join("\n", comModList.ToArray()), comModList.Count);
     }
 
     static void InitDict(ref GameObject prefab, ref Dictionary<GameObject, PNode> dict)
