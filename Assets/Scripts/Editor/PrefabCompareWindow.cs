@@ -1,9 +1,8 @@
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
-using System.Linq;
 using System.Reflection;
+using System;
 
 [ExecuteInEditMode]
 public class PrefabCompareWindow : EditorWindow
@@ -19,15 +18,12 @@ public class PrefabCompareWindow : EditorWindow
         public PNode(GameObject gameObject)
         {
             this.gameObject = gameObject;
+            this.show = false;
+            this.active = this.gameObject.activeSelf;
         }
     }
-    const int SPACE_PIXEL = 20;
-    readonly static Color COLOR_ACTIVE = new Color(1.0f, 1.0f, 1.0f, 1.0f);
-    readonly static Color COLOR_INACTIVE = new Color(1.0f, 1.0f, 1.0f, 0.5f);
     static GameObject prefab1;
     static GameObject prefab2;
-    static GameObject[] gameObjects;
-    static EditorWindow inspectorInstance;
     static Dictionary<GameObject, PNode> dict1 = new Dictionary<GameObject, PNode>();
     static Dictionary<GameObject, PNode> dict2 = new Dictionary<GameObject, PNode>();
     static List<string> addList = new List<string>();
@@ -36,15 +32,16 @@ public class PrefabCompareWindow : EditorWindow
     static List<string> comAddList = new List<string>();
     static List<string> comDelList = new List<string>();
     static List<string> comModList = new List<string>();
-    static Vector2 scroll;
+
+    static string[] ignoreComps = { "rigidbody", "rigidbody2D", "camera", "mesh", "materials", "material", "light", "animation", "constantForce", "renderer", "audio" };
 
     [MenuItem("Tools/Prefab Compare")]
     static void Init()
     {
         var window = EditorWindow.GetWindow(typeof(PrefabCompareWindow));
         // window.position = new Rect(50f, 50f, 5000f, 2400f);
-        window.maxSize = new Vector2(1000f, 600f);
-        window.minSize = new Vector2(1000f, 600f);
+        window.minSize = new Vector2(300f, 70f);
+        window.maxSize = new Vector2(300f, 70f);
         window.Show();
     }
 
@@ -55,37 +52,37 @@ public class PrefabCompareWindow : EditorWindow
 
     void OnGUI()
     {
-        GUILayout.BeginHorizontal();
+        EditorGUIUtility.labelWidth = 50;
+
+        EditorGUILayout.BeginHorizontal();
+        EditorGUI.BeginChangeCheck();
+        prefab1 = (GameObject)EditorGUILayout.ObjectField("trunk", prefab1, typeof(GameObject), true);
+        if (EditorGUI.EndChangeCheck() && prefab1 != null)
         {
-            EditorGUI.BeginChangeCheck();
-            prefab1 = (GameObject)EditorGUILayout.ObjectField("trunk", prefab1, typeof(GameObject), true);
-            if (EditorGUI.EndChangeCheck() && prefab1 != null)
-            {
-                // Debug.LogFormat("{0} changed", prefab1.name);
-                InitDict(ref prefab1, ref dict1);
-                // gameObjects = dict1.Keys.ToArray();
-            }
-
-            if (GUILayout.Button("Update") && prefab1 != null)
-            {
-                InitDict(ref prefab1, ref dict1);
-            }
-
-            EditorGUI.BeginChangeCheck();
-            prefab2 = (GameObject)EditorGUILayout.ObjectField("dev", prefab2, typeof(GameObject), true);
-            if (EditorGUI.EndChangeCheck() && prefab2 != null)
-            {
-                // Debug.LogFormat("{0} changed", prefab2.name);
-                InitDict(ref prefab2, ref dict2);
-                // gameObjects = dict2.Keys.ToArray();
-            }
-
-            if (GUILayout.Button("Update") && prefab2 != null)
-            {
-                InitDict(ref prefab2, ref dict2);
-            }
+            // Debug.LogFormat("{0} changed", prefab1.name);
+            InitDict(ref prefab1, ref dict1);
         }
-        GUILayout.EndHorizontal();
+
+        if (GUILayout.Button("Update", GUILayout.MaxWidth(50)) && prefab1 != null)
+        {
+            InitDict(ref prefab1, ref dict1);
+        }
+        EditorGUILayout.EndHorizontal();
+
+        EditorGUILayout.BeginHorizontal();
+        EditorGUI.BeginChangeCheck();
+        prefab2 = (GameObject)EditorGUILayout.ObjectField("dev", prefab2, typeof(GameObject), true);
+        if (EditorGUI.EndChangeCheck() && prefab2 != null)
+        {
+            // Debug.LogFormat("{0} changed", prefab2.name);
+            InitDict(ref prefab2, ref dict2);
+        }
+
+        if (GUILayout.Button("Update", GUILayout.MaxWidth(50)) && prefab2 != null)
+        {
+            InitDict(ref prefab2, ref dict2);
+        }
+        EditorGUILayout.EndHorizontal();
 
         if (GUILayout.Button("Compare"))
         {
@@ -198,7 +195,7 @@ public class PrefabCompareWindow : EditorWindow
         {
             return true;
         }
-        if (obj1.name != obj2.name)
+        if (obj1.transform.parent != null && obj2.transform.parent != null && obj1.name != obj2.name)
         {
             modList.Add(string.Format("<color=orange>dev:</color>   {0} (GameObject.name)", dict2[obj2].path));
         }
@@ -206,9 +203,17 @@ public class PrefabCompareWindow : EditorWindow
         {
             modList.Add(string.Format("<color=orange>dev:</color>   {0} (GameObject.activeSelf)", dict2[obj2].path));
         }
-        if (transform1 != transform2)
+        if (transform1.localPosition != transform2.localPosition)
         {
-            modList.Add(string.Format("<color=orange>dev:</color>   {0} (GameObject.transform)", dict2[obj2].path));
+            modList.Add(string.Format("<color=orange>dev:</color>   {0} (GameObject.transform.localPosition)", dict2[obj2].path));
+        }
+        if (transform1.localRotation != transform2.localRotation)
+        {
+            modList.Add(string.Format("<color=orange>dev:</color>   {0} (GameObject.transform.localRotation)", dict2[obj2].path));
+        }
+        if (transform1.localScale != transform2.localScale)
+        {
+            modList.Add(string.Format("<color=orange>dev:</color>   {0} (GameObject.transform.localScale)", dict2[obj2].path));
         }
         return false;
     }
@@ -267,32 +272,33 @@ public class PrefabCompareWindow : EditorWindow
         {
             for (var i = 0; i < props1.Length; ++i)
             {
-
-                if (props1[i].Name != props2[i].Name || props1[i].GetValue(comp1) != props2[i].GetValue(comp2))
+                if (Array.IndexOf(ignoreComps, props1[i].Name.ToString()) < 0
+                && props1[i].Name == props2[i].Name
+                && comp2.GetType().ToString() != "UnityEngine.Transform"
+                && props1[i].GetValue(comp1).ToString() != props2[i].GetValue(comp2).ToString())
                 {
-                    comModList.Add(string.Format("<color=orange>dev:</color>   {0} ({1})", dict2[obj2].path, props1[i].Name));
+                    comModList.Add(string.Format("<color=orange>dev:</color>   {0} ({1}.{2})", dict2[obj2].path, comp2.GetType(), props2[i].Name));
                 }
             }
         }
         catch
         {
-            Debug.LogError("err");
+            // Debug.LogError("工具异常，请不要联系作者");
         }
     }
 
     static void OutputLog()
     {
-        Debug.LogFormat("<color=lime>Add GameObjects ({1})</color>\n{0}", string.Join("\n", addList.ToArray()), addList.Count);
-        Debug.LogFormat("<color=red>Delete GameObjects  ({1})</color>\n{0}", string.Join("\n", delList.ToArray()), delList.Count);
-        Debug.LogFormat("<color=orange>Modified GameObjects ({1})</color>\n{0}", string.Join("\n", modList.ToArray()), modList.Count);
-        Debug.LogFormat("<color=lime>Add Component ({1})</color>\n{0}", string.Join("\n", comAddList.ToArray()), comAddList.Count);
-        Debug.LogFormat("<color=red>Delete Component ({1})</color>\n{0}", string.Join("\n", comDelList.ToArray()), comDelList.Count);
-        Debug.LogFormat("<color=orange>Modified Component ({1})</color>\n{0}", string.Join("\n", comModList.ToArray()), comModList.Count);
+        Debug.LogFormat("<color=lime>GameObject Add ({1})</color>\n{0}", string.Join("\n", addList.ToArray()), addList.Count);
+        Debug.LogFormat("<color=red>GameObject Delete ({1})</color>\n{0}", string.Join("\n", delList.ToArray()), delList.Count);
+        Debug.LogFormat("<color=orange>GameObject Modified ({1})</color>\n{0}", string.Join("\n", modList.ToArray()), modList.Count);
+        Debug.LogFormat("<color=lime>Component Add ({1})</color>\n{0}", string.Join("\n", comAddList.ToArray()), comAddList.Count);
+        Debug.LogFormat("<color=red>Component Delete ({1})</color>\n{0}", string.Join("\n", comDelList.ToArray()), comDelList.Count);
+        Debug.LogFormat("<color=orange>Component Modified ({1})</color>\n{0}", string.Join("\n", comModList.ToArray()), comModList.Count);
     }
 
     static void InitDict(ref GameObject prefab, ref Dictionary<GameObject, PNode> dict)
     {
-        gameObjects = null;
         dict.Clear();
         DFS(prefab, dict, 0, "");
     }
